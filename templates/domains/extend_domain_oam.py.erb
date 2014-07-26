@@ -1,0 +1,83 @@
+DOMAIN_PATH='<%= @domain_dir %>'
+
+ADMIN_USER='<%= @weblogic_user %>'
+ADMIN_PASSWORD='<%= @weblogic_password %>'
+
+JAVA_HOME='<%= @jdk_home_dir %>'
+
+<% if @java_arguments["OAM"] %>
+OAM_JAVA_ARGUMENTS='<%= @java_arguments["OAM"] %>'
+<% else %>
+OAM_JAVA_ARGUMENTS='-XX:PermSize=512m -XX:MaxPermSize=512m -Xms1024m -Xmx1024m -Dweblogic.Stdout=<%= @oam_nodemanager_log_dir %>/oam_server1.out -Dweblogic.Stderr=<%= @oam_nodemanager_log_dir %>/oam_server1_err.out'
+<% end %>
+
+OAM_REPOS_DBURL='<%= @repository_database_url %>'
+OAM_REPOS_DBUSER_PREFIX='<%= @repository_prefix %>'
+OAM_REPOS_DBPASSWORD='<%= @repository_password %>'
+
+def createBootPropertiesFile(directoryPath,fileName, username, password):
+  adminserverDir = File(directoryPath)
+  bool = adminserverDir.mkdirs()
+  fileNew=open(directoryPath + '/'+fileName, 'w')
+  fileNew.write('username=%s\n' % username)
+  fileNew.write('password=%s\n' % password)
+  fileNew.flush()
+  fileNew.close()
+
+readDomain(DOMAIN_PATH)
+
+print 'Adding OAM Template'
+addTemplate('<%= @templateOAM %>')
+
+print 'Change datasources'
+print 'Change oamDS'
+cd('/JDBCSystemResource/oamDS/JdbcResource/oamDS/JDBCDriverParams/NO_NAME_0')
+set('URL',OAM_REPOS_DBURL)
+set('PasswordEncrypted',OAM_REPOS_DBPASSWORD)
+cd('Properties/NO_NAME_0/Property/user')
+set('Value',OAM_REPOS_DBUSER_PREFIX+'_OAM')
+
+print 'Change opss-DBDS	'
+cd('/JDBCSystemResource/opss-DBDS/JdbcResource/opss-DBDS/JDBCDriverParams/NO_NAME_0')
+set('URL',OAM_REPOS_DBURL)
+set('PasswordEncrypted',OAM_REPOS_DBPASSWORD)
+cd('Properties/NO_NAME_0/Property/user')
+set('Value',OAM_REPOS_DBUSER_PREFIX+'_OPSS')
+
+print 'Change oam_server1'
+cd('/Servers/oam_server1')
+set('Machine','LocalMachine')
+# set listen adress on server
+set('ListenAddress','<%= @adminserver_address %>')
+
+create('oam_server1','ServerStart')
+cd('ServerStart/oam_server1')
+set('Arguments', OAM_JAVA_ARGUMENTS)
+set('JavaVendor','Sun')
+set('JavaHome', '<%= @JAVA_HOME %>')
+
+cd('/Server/oam_server1')
+create('oam_server1','SSL')
+cd('SSL/oam_server1')
+set('Enabled', 'False')
+set('HostNameVerificationIgnored', 'True')
+
+
+cd('/Server/oam_server1')
+create('oam_server1','Log')
+cd('/Server/oam_server1/Log/oam_server1')
+set('FileName','<%= @oam_nodemanager_log_dir %>/oam_server1.log')
+set('FileCount',10)
+set('FileMinSize',5000)
+set('RotationType','byTime')
+set('FileTimeSpan',24)
+
+dumpStack();
+updateDomain()
+closeDomain()
+# end check
+
+createBootPropertiesFile(DOMAIN_PATH+'/servers/oam_server1/security','boot.properties',ADMIN_USER,ADMIN_PASSWORD)
+
+print('Exiting...')
+exit()
